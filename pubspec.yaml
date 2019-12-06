@@ -1,0 +1,9 @@
+name: simplistic
+version: 0.1.0
+description: Simple HttpServer that accepts TLS certificates and a basic websocket connect
+author: Matthew Butler <butler.matthew@gmail.com>
+repository: https://github.com/IOT-DSA/simplistic
+dependencies:
+  args: any
+environment:
+  sdk: ">=1.13.0"
