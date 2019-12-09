@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
+import 'pages.dart';
+
 SecurityContext parseArgs(List<String> args) {
   ArgResults results;
   SecurityContext context;
@@ -80,10 +82,39 @@ class SimpleServer {
     if (path.endsWith('favicon.ico')) {
       req.response.statusCode = HttpStatus.NOT_FOUND;
       req.response.writeln('not found');
-      req.response.close();
+      return req.response.close();
     }
 
-    req.response.writeln('ok');
+    if (path == '/ws') return handleWebsocket(req);
+
+    req.response..headers.contentType = ContentType.HTML
+        ..writeln(indexPage);
     return req.response.close();
+  }
+
+  static Future handleWebsocket(HttpRequest req) async {
+    if (!WebSocketTransformer.isUpgradeRequest(req)) {
+      print('Invalid Websocket request.');
+      req.response
+          ..statusCode = HttpStatus.BAD_REQUEST
+          ..writeln('invalid request');
+      return req.response.close();
+    }
+
+    var ws = await WebSocketTransformer.upgrade(req);
+    ws.listen((String data) {
+      print('${new DateTime.now()}: [${req.connectionInfo.remoteAddress.address}] - Websocket: $data');
+      ws.add('Pong!');
+    },
+        onDone: () {
+          print('${new DateTime.now()}: [${req.connectionInfo.remoteAddress.address}] - Websocket closed');
+      ws?.close();
+    });
+
+    return req.response.close();
+  }
+
+  static void wsMsg(String data) {
+    print('Websocket received: $data');
   }
 }
