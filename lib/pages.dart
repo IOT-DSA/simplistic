@@ -13,6 +13,16 @@ var host = window.location.host;
 var url = scheme + '//' + host + '/ws';
 console.log(url);
 
+var ws = new WebSocket(url);
+ws.onmessage = function (event) {
+  console.log(event.data);
+  if (event.data == "Ping?") {
+    ws.send("Pong!");
+  }
+};
+ws.onopen = wsOpen;
+ws.onclose = wsClosed;
+
 function sendPing(socket) {
   socket.send("Ping?");
 }
@@ -20,14 +30,13 @@ function sendPing(socket) {
 function wsOpen(event) {
   console.log("connection established. Ping?");
   ws.send("Ping?");
-  intId = window.setInterval(sendPing, 30 * 1000, ws);
+  intId = window.setInterval(sendPing, 10 * 1000, ws);
 }
 
-var ws = new WebSocket(url);
-ws.onmessage = function (event) {
-  console.log(event.data);
-};
-ws.onopen = wsOpen;
+function wsClosed(event) {
+  console.log('Connection terminated. Stopping pings');
+  window.clearInterval(intId);
+}
 
 </script>
 </body>

@@ -1,66 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:args/args.dart';
-
 import 'pages.dart';
 
-SecurityContext parseArgs(List<String> args) {
-  ArgResults results;
-  SecurityContext context;
-
-  ArgParser parser = new ArgParser();
-  parser..addOption('cert', abbr: 'c', help:
-  'Path to the security certificate chain (preferrably PEM format).')
-    ..addOption('key', abbr: 'k', help:
-    'Path to the key file for the certificate chain (preferrably in PEM format).')
-    ..addOption('password', abbr: 'p', help:
-    'Password required for security key. Omit for no (null) password.');
-
-  try {
-    results = parser.parse(args);
-  } on FormatException catch (e) {
-    print(e.message);
-    printHelp();
-    exit(1);
-  }
-
-  if (results['cert'] == null || results['key'] == null) {
-    print('Missing required aregument.');
-    printHelp();
-    exit(1);
-  }
-
-  var cert = results['cert'];
-  var key = results['key'];
-
-  try {
-    context = new SecurityContext()
-      ..useCertificateChain(cert)
-      ..usePrivateKey(key, password: results['password']);
-  } on FileSystemException catch (e) {
-    print('Unable to open certificate file.');
-    print('${e.message}: ${e.path}');
-    exit(2);
-  } catch (e) {
-    print('Unexpected error: $e');
-    exit(3);
-  }
-
-  return context;
-}
-
-void printHelp() {
-  print('''Usage: dart bin/main.dart <options>
-  
-  Options:
-  --cert or -c (Required)
-    Path to the security certificate chain (preferrably in PEM format).
-  --key or -k (Required)
-    Path to the key file for the certificate chain (preferrably in PEM format).
-  --password or -p
-    Password required for security key. Omit for no (null) password. Pass the
-    parameter but do not include any password for an empty password string.''');
+void log(String address, String msg) {
+  var now = new DateTime.now();
+  print('$now: [$address] - $msg');
 }
 
 class SimpleServer {
@@ -76,7 +21,7 @@ class SimpleServer {
   }
 
   static Future handleRequest(HttpRequest req) async {
-    print('${new DateTime.now()}: [${req.connectionInfo.remoteAddress.address}] - ${req.requestedUri}');
+    log(req.connectionInfo.remoteAddress.address, req.requestedUri.toString());
 
     var path = req.uri.path;
     if (path.endsWith('favicon.ico')) {
@@ -102,19 +47,47 @@ class SimpleServer {
     }
 
     var ws = await WebSocketTransformer.upgrade(req);
-    ws.listen((String data) {
-      print('${new DateTime.now()}: [${req.connectionInfo.remoteAddress.address}] - Websocket: $data');
-      ws.add('Pong!');
-    },
-        onDone: () {
-          print('${new DateTime.now()}: [${req.connectionInfo.remoteAddress.address}] - Websocket closed');
-      ws?.close();
-    });
+    var conn = new SimpleConn(ws, req.connectionInfo);
 
     return req.response.close();
   }
+}
 
-  static void wsMsg(String data) {
-    print('Websocket received: $data');
+class SimpleConn {
+  final WebSocket ws;
+  final HttpConnectionInfo info;
+  bool isSet = false;
+  Timer keepAlive;
+
+  SimpleConn(this.ws, this.info) {
+    ws.listen(handleData, onDone: closeWs);
+  }
+
+  void handleData(String data) {
+    log(info.remoteAddress.address, 'Websocket: $data');
+
+    switch (data) {
+      case 'Ping?':
+        ws.add('Pong!');
+        break;
+      default:
+        ws.add(data); // Echo back any non-ping data
+    }
+
+    if (!isSet) {
+      isSet = true;
+      new Future.delayed(const Duration(seconds: 5), _setTimer);
+    }
+  }
+
+  void _setTimer() {
+    if (keepAlive != null) return;
+    keepAlive = new Timer.periodic(const Duration(seconds: 10), (_) => ws.add('Ping?'));
+  }
+
+  void closeWs() {
+    log(info.remoteAddress.address, 'Websocket closed');
+    ws?.close();
+    keepAlive.cancel();
   }
 }
