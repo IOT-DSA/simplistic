@@ -88,6 +88,6 @@ class SimpleConn {
   void closeWs() {
     log(info.remoteAddress.address, 'Websocket closed');
     ws?.close();
-    keepAlive.cancel();
+    keepAlive?.cancel();
   }
 }
